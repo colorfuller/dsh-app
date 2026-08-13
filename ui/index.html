@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>DeepSeek Harness</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        background: linear-gradient(160deg, #f6f8fc, #eef2f9);
+        color: #18202f;
+      }
+      @media (prefers-color-scheme: dark) {
+        body {
+          background: linear-gradient(160deg, #151a24, #10151f);
+          color: #e8edf7;
+        }
+      }
+      main {
+        width: min(380px, calc(100vw - 48px));
+        text-align: center;
+      }
+      .badge {
+        width: 52px;
+        height: 52px;
+        margin: 0 auto 16px;
+        border-radius: 16px;
+        display: grid;
+        place-items: center;
+        font-weight: 700;
+        font-size: 22px;
+        color: #fff;
+        background: linear-gradient(135deg, #4d6bfe, #8b5cf6);
+      }
+      h1 {
+        font-size: 18px;
+        margin: 0 0 8px;
+      }
+      p {
+        font-size: 13px;
+        line-height: 1.6;
+        opacity: 0.78;
+        margin: 0;
+      }
+      .url {
+        margin-top: 14px;
+        font-family: Consolas, "Courier New", monospace;
+        font-size: 12px;
+        user-select: all;
+        word-break: break-all;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="badge">DS</div>
+      <h1 id="title">正在启动 DeepSeek Harness</h1>
+      <p id="message">启动内置 dsh web 服务，稍后在此窗口打开 Web UI…</p>
+      <p class="url" id="url" hidden></p>
+    </main>
+    <script>
+      window.dshStatus = function (payload) {
+        var state = payload && payload.state ? payload.state : "starting";
+        var title = document.getElementById("title");
+        var message = document.getElementById("message");
+        var url = document.getElementById("url");
+
+        if (state === "ready") {
+          title.textContent = "Web UI 已启动";
+          message.textContent = "正在此窗口打开 Web UI；关闭本窗口将停止服务。";
+          url.textContent = payload.url || "";
+          url.hidden = false;
+        } else if (state === "error" || state === "exited") {
+          title.textContent = state === "error" ? "启动失败" : "服务已停止";
+          message.textContent = payload.message || "发生未知错误";
+          url.hidden = true;
+        }
+      };
+    </script>
+  </body>
+</html>
