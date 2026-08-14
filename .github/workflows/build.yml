@@ -70,6 +70,9 @@ jobs:
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Generate icons
+        run: pnpm icons
+
       - name: Build installers (${{ matrix.bundles }})
         run: pnpm build --bundles ${{ matrix.bundles }}
 
