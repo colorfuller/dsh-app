@@ -157,7 +157,7 @@
           failed.hidden = true;
           log.hidden = true;
           message.hidden = false;
-          message.textContent = "Web UI 已启动，正在此窗口打开；关闭本窗口将停止服务。";
+          message.textContent = "Web UI 已启动；关闭窗口将最小化到系统托盘，服务继续在后台运行。";
           url.textContent = payload.url || "";
           url.hidden = false;
         } else if (state === "checking-update") {

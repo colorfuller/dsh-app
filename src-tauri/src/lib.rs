@@ -13,7 +13,11 @@ use std::{
     thread,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
-use tauri::{App, AppHandle, Manager, RunEvent, WindowEvent};
+use tauri::{
+    menu::{Menu, MenuItem},
+    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
+    App, AppHandle, Manager, RunEvent, WindowEvent,
+};
 
 const STARTUP_TIMEOUT: Duration = Duration::from_secs(90);
 const STDERR_TAIL_LIMIT: usize = 30;
@@ -155,6 +159,55 @@ fn eval_status(app: &AppHandle, payload: &Value) {
     }
 }
 
+fn show_main_window(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.show();
+        let _ = window.unminimize();
+        let _ = window.set_focus();
+    }
+}
+
+fn toggle_main_window(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        if window.is_visible().unwrap_or(false) {
+            let _ = window.hide();
+        } else {
+            show_main_window(app);
+        }
+    }
+}
+
+fn setup_tray(app: &mut App) -> Result<(), Box<dyn std::error::Error>> {
+    let toggle_item = MenuItem::with_id(app, "toggle", "显示/隐藏主窗口", true, None::<&str>)?;
+    let quit_item = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
+    let menu = Menu::with_items(app, &[&toggle_item, &quit_item])?;
+
+    let mut builder = TrayIconBuilder::with_id("main-tray")
+        .menu(&menu)
+        .show_menu_on_left_click(false)
+        .tooltip("DeepSeek Harness")
+        .on_menu_event(|app, event| match event.id().as_ref() {
+            "toggle" => toggle_main_window(app),
+            "quit" => app.exit(0),
+            _ => {}
+        })
+        .on_tray_icon_event(|tray, event| {
+            if let TrayIconEvent::Click {
+                button: MouseButton::Left,
+                button_state: MouseButtonState::Up,
+                ..
+            } = event
+            {
+                show_main_window(tray.app_handle());
+            }
+        });
+    if let Some(icon) = app.default_window_icon() {
+        builder = builder.icon(icon.clone());
+    }
+    builder.build(app)?;
+    Ok(())
+}
+
 fn stop_server(app: &AppHandle) {
     if let Some(state) = app.try_state::<ServerProcess>() {
         if let Some(mut child) = state.0.lock().unwrap().take() {
@@ -224,6 +277,10 @@ fn setup_server(app: &mut App) -> Result<(), Box<dyn std::error::Error>> {
     app.manage(LastActivity(Mutex::new(Instant::now())));
     app.manage(ShellLogPath(shell_log.clone()));
     app.manage(StderrTail(Mutex::new(Vec::new())));
+
+    if let Err(error) = setup_tray(app) {
+        append_log(&shell_log, &format!("tray setup failed: {error}"));
+    }
 
     let app_handle = app.handle().clone();
     thread::spawn(move || {
@@ -346,10 +403,15 @@ fn setup_server(app: &mut App) -> Result<(), Box<dyn std::error::Error>> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            show_main_window(app);
+        }))
         .setup(setup_server)
         .on_window_event(|window, event| {
-            if matches!(event, WindowEvent::CloseRequested { .. }) {
-                stop_server(window.app_handle());
+            // 关闭窗口时隐藏到托盘，服务继续在后台运行；退出请使用托盘菜单。
+            if let WindowEvent::CloseRequested { api, .. } = event {
+                api.prevent_close();
+                let _ = window.hide();
             }
         })
         .build(tauri::generate_context!())
