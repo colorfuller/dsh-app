@@ -1,6 +1,9 @@
 use serde_json::{json, Value};
 use std::{
+    fs::{create_dir_all, OpenOptions},
     io::{BufRead, BufReader},
+    io::Write,
+    path::Path,
     path::PathBuf,
     process::{Child, Command, Stdio},
     sync::{
@@ -8,11 +11,12 @@ use std::{
         Mutex,
     },
     thread,
-    time::Duration,
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 use tauri::{App, AppHandle, Manager, RunEvent, WindowEvent};
 
 const STARTUP_TIMEOUT: Duration = Duration::from_secs(90);
+const STDERR_TAIL_LIMIT: usize = 30;
 
 /// The running core process. One shell owns one dsh server.
 pub struct ServerProcess(Mutex<Option<Child>>);
@@ -22,6 +26,58 @@ pub struct ReadyUrl(Mutex<Option<String>>);
 
 /// Whether the core reported readiness.
 pub struct Ready(AtomicBool);
+
+/// When the core last wrote any line to stdout/stderr.
+pub struct LastActivity(Mutex<Instant>);
+
+/// Where the shell-side log file lives.
+pub struct ShellLogPath(PathBuf);
+
+/// The most recent core stderr lines, included in the exited status payload.
+pub struct StderrTail(Mutex<Vec<String>>);
+
+fn shell_log_path<R: tauri::Runtime>(manager: &impl tauri::Manager<R>) -> PathBuf {
+    if let Ok(dir) = manager.path().app_data_dir() {
+        return dir.join("logs").join("shell.log");
+    }
+    std::env::temp_dir().join("dsh-app-logs").join("shell.log")
+}
+
+fn append_log(path: &Path, line: &str) {
+    if let Some(parent) = path.parent() {
+        let _ = create_dir_all(parent);
+    }
+    let Ok(mut file) = OpenOptions::new().create(true).append(true).open(path) else {
+        return;
+    };
+    let seconds = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_secs())
+        .unwrap_or(0);
+    let _ = writeln!(file, "[{seconds}] {line}");
+}
+
+/// Strip the Windows verbatim (`\\?\`) prefix so a path can safely be passed
+/// as a child-process argv element; verbatim paths confuse Windows command
+/// line parsing (e.g. `\\?\D:\...` arrives as `D:`).
+fn env_friendly_path(path: PathBuf) -> PathBuf {
+    #[cfg(target_os = "windows")]
+    {
+        let raw = path.to_string_lossy();
+        let stripped = if let Some(rest) = raw.strip_prefix(r"\\?\UNC\") {
+            format!("\\{rest}")
+        } else if let Some(rest) = raw.strip_prefix(r"\\?\") {
+            rest.to_string()
+        } else {
+            raw.to_string()
+        };
+        return PathBuf::from(stripped);
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        path
+    }
+}
 
 /// Sidecar file name required by Tauri's `externalBin` convention.
 fn sidecar_file_name() -> &'static str {
@@ -71,21 +127,6 @@ fn sidecar_path() -> PathBuf {
     exe_dir.join(sidecar_file_name())
 }
 
-/// Resolve the on-disk dsh runtime: dev prefers the checked-out copy, and the
-/// packaged app falls back to the `runtime/` resource next to the exe.
-fn runtime_dir() -> Option<PathBuf> {
-    let manifest_runtime = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("runtime");
-    if manifest_runtime.is_dir() {
-        return Some(manifest_runtime);
-    }
-    let exe_dir = std::env::current_exe().ok()?.parent()?.to_path_buf();
-    let exe_runtime = exe_dir.join("runtime");
-    if exe_runtime.is_dir() {
-        return Some(exe_runtime);
-    }
-    None
-}
-
 #[cfg(target_os = "windows")]
 fn hide_console(command: &mut Command) {
     use std::os::windows::process::CommandExt;
@@ -98,10 +139,17 @@ fn hide_console(_command: &mut Command) {}
 
 /// Push a status payload into the WebView2 window without a JS dependency.
 fn eval_status(app: &AppHandle, payload: &Value) {
+    let mut payload = payload.clone();
+    let state = payload.get("state").and_then(Value::as_str).unwrap_or("starting");
+    if matches!(state, "error" | "exited") && payload.get("log").is_none() {
+        if let Some(path) = app.try_state::<ShellLogPath>() {
+            payload["log"] = json!(path.0.display().to_string());
+        }
+    }
     if let Some(window) = app.get_webview_window("main") {
         let script = format!(
             "window.dshStatus({});",
-            serde_json::to_string(payload).unwrap_or_else(|_| "null".to_string())
+            serde_json::to_string(&payload).unwrap_or_else(|_| "null".to_string())
         );
         let _ = window.eval(&script);
     }
@@ -110,6 +158,9 @@ fn eval_status(app: &AppHandle, payload: &Value) {
 fn stop_server(app: &AppHandle) {
     if let Some(state) = app.try_state::<ServerProcess>() {
         if let Some(mut child) = state.0.lock().unwrap().take() {
+            if let Some(log) = app.try_state::<ShellLogPath>() {
+                append_log(&log.0, "stopping core (window close / timeout / exit)");
+            }
             #[cfg(target_os = "windows")]
             {
                 // The core is a supervisor: terminate the whole tree so the
@@ -129,38 +180,61 @@ fn stop_server(app: &AppHandle) {
 }
 
 fn setup_server(app: &mut App) -> Result<(), Box<dyn std::error::Error>> {
+    let shell_log = shell_log_path(app);
+    append_log(
+        &shell_log,
+        &format!("--- dsh-app shell starting (pid {}) ---", std::process::id()),
+    );
     let sidecar = sidecar_path();
     if !sidecar.exists() {
+        append_log(&shell_log, &format!("sidecar missing at {}", sidecar.display()));
         return Err(format!(
             "core sidecar missing at {}; run the full build first",
             sidecar.display()
         )
         .into());
     }
-    let runtime = runtime_dir().ok_or_else(|| "dsh runtime directory not found".to_string())?;
-
     let mut command = Command::new(sidecar);
     command
         .arg("--no-open")
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .env("DSH_RUNTIME_DIR", runtime);
+        .stderr(Stdio::piped());
+    // Tell the core where the app resources live (bundled runtime/ and
+    // npm-cli/). The core itself resolves user-installed runtimes under
+    // $DSH_HOME/runtime and falls back to these resources.
+    if let Ok(resource_dir) = app.path().resource_dir() {
+        command.env("DSH_RESOURCE_DIR", env_friendly_path(resource_dir));
+    }
+    // Used as a writable dsh-home fallback when ~/.dsh is locked down.
+    if let Ok(app_data_dir) = app.path().app_data_dir() {
+        command.env("DSH_APP_DATA_DIR", env_friendly_path(app_data_dir));
+    }
     hide_console(&mut command);
 
     let mut child = command
         .spawn()
         .map_err(|error| format!("failed to start core: {error}"))?;
+    append_log(&shell_log, &format!("core spawned (pid {})", child.id()));
     let stdout = child.stdout.take().ok_or("core stdout is not piped")?;
     let stderr = child.stderr.take().ok_or("core stderr is not piped")?;
 
     app.manage(ServerProcess(Mutex::new(Some(child))));
     app.manage(ReadyUrl(Mutex::new(None)));
     app.manage(Ready(AtomicBool::new(false)));
+    app.manage(LastActivity(Mutex::new(Instant::now())));
+    app.manage(ShellLogPath(shell_log.clone()));
+    app.manage(StderrTail(Mutex::new(Vec::new())));
 
     let app_handle = app.handle().clone();
     thread::spawn(move || {
         for line in BufReader::new(stdout).lines().map_while(Result::ok) {
-            if let Some(json_text) = line.strip_prefix("DSH_READY ") {
+            *app_handle.state::<LastActivity>().0.lock().unwrap() = Instant::now();
+            append_log(&app_handle.state::<ShellLogPath>().0, &format!("[out] {line}"));
+            if let Some(json_text) = line.strip_prefix("DSH_STATUS ") {
+                if let Ok(payload) = serde_json::from_str::<Value>(json_text) {
+                    eval_status(&app_handle, &payload);
+                }
+            } else if let Some(json_text) = line.strip_prefix("DSH_READY ") {
                 if let Ok(payload) = serde_json::from_str::<Value>(json_text) {
                     let url = payload
                         .get("url")
@@ -186,6 +260,16 @@ fn setup_server(app: &mut App) -> Result<(), Box<dyn std::error::Error>> {
     let app_handle = app.handle().clone();
     thread::spawn(move || {
         for line in BufReader::new(stderr).lines().map_while(Result::ok) {
+            *app_handle.state::<LastActivity>().0.lock().unwrap() = Instant::now();
+            append_log(&app_handle.state::<ShellLogPath>().0, &format!("[err] {line}"));
+            {
+                let tail_state = app_handle.state::<StderrTail>();
+                let mut tail = tail_state.0.lock().unwrap();
+                tail.push(line.clone());
+                if tail.len() > STDERR_TAIL_LIMIT {
+                    tail.remove(0);
+                }
+            }
             if let Some(json_text) = line.strip_prefix("DSH_ERROR ") {
                 if let Ok(mut payload) = serde_json::from_str::<Value>(json_text) {
                     payload
@@ -211,12 +295,20 @@ fn setup_server(app: &mut App) -> Result<(), Box<dyn std::error::Error>> {
             Ok(Some(status)) => {
                 guard.take();
                 drop(guard);
+                let mut message = format!("服务进程已退出（{}）", status);
+                if let Some(tail_state) = app_handle.try_state::<StderrTail>() {
+                    let lines = tail_state.0.lock().unwrap();
+                    if !lines.is_empty() {
+                        message.push_str(&format!("\n最近输出：\n{}", lines.join("\n")));
+                    }
+                }
+                append_log(
+                    &app_handle.state::<ShellLogPath>().0,
+                    &format!("core exited ({status})"),
+                );
                 eval_status(
                     &app_handle,
-                    &json!({
-                        "state": "exited",
-                        "message": format!("服务进程已退出（{}）", status)
-                    }),
+                    &json!({ "state": "exited", "message": message }),
                 );
                 break;
             }
@@ -226,19 +318,26 @@ fn setup_server(app: &mut App) -> Result<(), Box<dyn std::error::Error>> {
     });
 
     let app_handle = app.handle().clone();
-    thread::spawn(move || {
-        thread::sleep(STARTUP_TIMEOUT);
+    thread::spawn(move || loop {
+        thread::sleep(Duration::from_millis(500));
         if app_handle.state::<Ready>().0.load(Ordering::SeqCst) {
             return;
         }
-        stop_server(&app_handle);
-        eval_status(
-            &app_handle,
-            &json!({
-                "state": "error",
-                "message": "启动超时（90 秒），请查看日志后重试"
-            }),
-        );
+        let Some(state) = app_handle.try_state::<LastActivity>() else {
+            return;
+        };
+        let last = *state.0.lock().unwrap();
+        if last.elapsed() > STARTUP_TIMEOUT {
+            stop_server(&app_handle);
+            eval_status(
+                &app_handle,
+                &json!({
+                    "state": "error",
+                    "message": "启动超时（90 秒无活动输出），请检查网络或日志后重试"
+                }),
+            );
+            return;
+        }
     });
 
     Ok(())

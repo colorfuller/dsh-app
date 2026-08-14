@@ -28,7 +28,8 @@
     "targets": "all",
     "externalBin": ["binaries/dsh-core"],
     "resources": {
-      "../runtime": "runtime"
+      "../runtime": "runtime",
+      "../npm-cli": "npm-cli"
     },
     "windows": {
       "nsis": {

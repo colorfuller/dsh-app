@@ -1,5 +1,6 @@
 node_modules/
 runtime/
+npm-cli/
 dist-core/
 src-tauri/target/
 src-tauri/gen/

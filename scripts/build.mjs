@@ -11,6 +11,7 @@ const runtimeDir = join(rootDir, "runtime");
 const coreOutputDir = join(rootDir, "dist-core");
 const tauriDir = join(rootDir, "src-tauri");
 const binariesDir = join(tauriDir, "binaries");
+const npmCliEntry = join(rootDir, "npm-cli", "bin", "npm-cli.js");
 
 const CRITICAL_RUNTIME_FILES = [
   join("node_modules", "@deepseek-ai", "dsh", "lib", "bin.js"),
@@ -41,6 +42,14 @@ function verifyRuntime(dir, label) {
   const missing = CRITICAL_RUNTIME_FILES.filter((file) => !existsSync(join(dir, file)));
   if (missing.length > 0) {
     throw new Error(`${label} is incomplete; missing: ${missing.join(", ")}`);
+  }
+}
+
+/** Fail loudly if the bundled npm CLI resource is missing. */
+function verifyNpmCli(dir, label) {
+  const entry = join(dir, "npm-cli", "bin", "npm-cli.js");
+  if (!existsSync(entry)) {
+    throw new Error(`${label} is missing the npm CLI at ${entry}`);
   }
 }
 
@@ -96,14 +105,26 @@ function targetTriple() {
 
 function main() {
   const args = process.argv.slice(2);
-  const noBundle = args.includes("--no-bundle");
-  const bundlesIndex = args.indexOf("--bundles");
-  const bundles = bundlesIndex >= 0 ? args[bundlesIndex + 1] : undefined;
+  const extraArgs = [...args];
+  const bundlesIndex = extraArgs.indexOf("--bundles");
+  const bundles = bundlesIndex >= 0 ? extraArgs[bundlesIndex + 1] : undefined;
+  if (bundlesIndex >= 0) {
+    extraArgs.splice(bundlesIndex, 2);
+  }
+  const noBundleIndex = extraArgs.indexOf("--no-bundle");
+  const noBundle = noBundleIndex >= 0;
+  if (noBundleIndex >= 0) {
+    extraArgs.splice(noBundleIndex, 1);
+  }
 
   if (!existsSync(join(runtimeDir, "node_modules", "@deepseek-ai", "dsh", "lib", "bin.js"))) {
     run(process.execPath, [join(rootDir, "scripts", "prepare-runtime.mjs")]);
   }
+  if (!existsSync(npmCliEntry)) {
+    run(process.execPath, [join(rootDir, "scripts", "prepare-npm-cli.mjs")]);
+  }
   verifyRuntime(runtimeDir, "source runtime");
+  verifyNpmCli(rootDir, "source npm-cli");
   run(process.execPath, [join(rootDir, "scripts", "build-core.mjs")]);
 
   const coreSource = join(coreOutputDir, process.platform === "win32" ? "dsh-core.exe" : "dsh-core");
@@ -123,6 +144,7 @@ function main() {
   } else if (bundles !== undefined) {
     tauriArgs.push("--bundles", bundles);
   }
+  tauriArgs.push(...extraArgs);
   run(join(rootDir, "node_modules", ".bin", process.platform === "win32" ? "tauri.cmd" : "tauri"), tauriArgs);
 
   // The bundler copies resources into target/<profile>/runtime. Verify the
@@ -132,6 +154,7 @@ function main() {
     throw new Error(`bundle runtime missing after build: ${bundledRuntimeDir}`);
   }
   verifyRuntime(bundledRuntimeDir, "bundled runtime");
+  verifyNpmCli(join(tauriDir, "target", "release"), "bundled npm-cli");
   verifyBundleContainsSource(runtimeDir, bundledRuntimeDir);
   const sourceCount = countFiles(runtimeDir);
   const bundledCount = countFiles(bundledRuntimeDir);

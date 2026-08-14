@@ -77,7 +77,11 @@ jobs:
       - name: Build installers (${{ matrix.bundles }})
         env:
           APPIMAGE_EXTRACT_AND_RUN: "1"
-        run: pnpm build --bundles ${{ matrix.bundles }}
+          NO_STRIP: "1"
+        run: pnpm build --bundles ${{ matrix.bundles }} --verbose
+
+      - name: Smoke test runtime auto-update
+        run: pnpm smoke:update
 
       - name: Collect installers
         shell: bash

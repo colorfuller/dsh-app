@@ -8,10 +8,12 @@
     "dev": "node src/launcher.js",
     "runtime:prepare": "node scripts/prepare-runtime.mjs",
     "runtime:prune": "node scripts/prune-runtime.mjs",
+    "npm-cli:prepare": "node scripts/prepare-npm-cli.mjs",
     "core:build": "node scripts/build-core.mjs",
     "build": "node scripts/build.mjs",
     "build:exe": "node scripts/build.mjs --no-bundle",
     "build:nsi": "node scripts/build.mjs --bundles nsis",
+    "smoke:update": "node scripts/smoke-update.mjs",
     "icons": "tauri icon assets/icon.svg"
   },
   "dependencies": {
@@ -19,6 +21,8 @@
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2",
-    "@yao-pkg/pkg": "^6"
+    "@yao-pkg/pkg": "^6",
+    "bumpp": "^12.2.1",
+    "npm": "^11.0.0"
   }
 }

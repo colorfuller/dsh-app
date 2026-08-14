@@ -136,6 +136,7 @@
         <div class="failed" id="failed" hidden>
           <div class="failedTitle" id="title"></div>
           <div class="failedItem" id="detail"></div>
+          <div class="failedItem" id="log" hidden></div>
         </div>
         <p class="url" id="url" hidden></p>
       </div>
@@ -149,20 +150,60 @@
         var url = document.getElementById("url");
         var spinner = document.getElementById("spinner");
         var failed = document.getElementById("failed");
+        var log = document.getElementById("log");
 
         if (state === "ready") {
           spinner.hidden = true;
           failed.hidden = true;
+          log.hidden = true;
           message.hidden = false;
           message.textContent = "Web UI 已启动，正在此窗口打开；关闭本窗口将停止服务。";
           url.textContent = payload.url || "";
           url.hidden = false;
+        } else if (state === "checking-update") {
+          spinner.hidden = false;
+          failed.hidden = true;
+          log.hidden = true;
+          message.hidden = false;
+          message.textContent = "正在检查 dsh 更新…";
+        } else if (state === "home-fallback") {
+          spinner.hidden = false;
+          failed.hidden = true;
+          log.hidden = true;
+          message.hidden = false;
+          message.textContent = payload.home
+            ? "默认数据目录不可写，已改用 " + payload.home + "…"
+            : "默认数据目录不可写，正在使用备用目录…";
+        } else if (state === "updating") {
+          spinner.hidden = false;
+          failed.hidden = true;
+          log.hidden = true;
+          message.hidden = false;
+          message.textContent = payload.to
+            ? "正在从 npm 更新 dsh 到 " + payload.to + "，请稍候…"
+            : "正在从 npm 更新 dsh，请稍候…";
+        } else if (state === "update-installed") {
+          spinner.hidden = false;
+          failed.hidden = true;
+          log.hidden = true;
+          message.hidden = false;
+          message.textContent = payload.version
+            ? "已安装 dsh " + payload.version + "，正在启动…"
+            : "已安装新版本 dsh，正在启动…";
+        } else if (state === "update-failed") {
+          spinner.hidden = false;
+          failed.hidden = true;
+          log.hidden = true;
+          message.hidden = false;
+          message.textContent = "dsh 更新失败（" + (payload.message || "未知原因") + "），正在使用现有版本启动…";
         } else if (state === "error" || state === "exited") {
           spinner.hidden = true;
           message.hidden = true;
           failed.hidden = false;
           title.textContent = state === "error" ? "启动失败" : "服务已停止";
           detail.textContent = payload.message || "发生未知错误";
+          log.hidden = !payload.log;
+          log.textContent = payload.log ? "日志：" + payload.log : "";
           url.hidden = true;
         }
       };
