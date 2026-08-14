@@ -62,6 +62,30 @@ if (result.status !== 0) {
   process.exit(result.status ?? 1);
 }
 
+// node-pty ships prebuilt binaries for Windows/macOS only. On Linux npm's
+// --ignore-scripts above skips its install hook, so the native pty.node is
+// never produced and dsh's subprocess plugin cannot load at boot. Rebuild
+// just that package with lifecycle scripts enabled (CI installs
+// build-essential, and npm bundles its own node-gyp).
+console.log("rebuilding node-pty native module ...");
+const rebuildResult = spawnSync(
+  "npm",
+  ["rebuild", "node-pty", "--no-audit", "--no-fund", "--no-progress"],
+  {
+    cwd: runtimeDir,
+    stdio: "inherit",
+    shell: process.platform === "win32"
+  }
+);
+if (rebuildResult.error !== undefined) {
+  console.error(`npm rebuild failed to start: ${rebuildResult.error.message}`);
+  process.exit(1);
+}
+if (rebuildResult.status !== 0) {
+  console.error(`npm rebuild node-pty exited with status ${rebuildResult.status}`);
+  process.exit(rebuildResult.status ?? 1);
+}
+
 const binPath = join(runtimeDir, "node_modules", "@deepseek-ai", "dsh", "lib", "bin.js");
 if (!existsSync(binPath)) {
   console.error(`runtime install completed but the dsh bin is missing: ${binPath}`);
