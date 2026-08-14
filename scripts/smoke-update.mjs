@@ -211,7 +211,15 @@ async function main() {
     const firstLines = [];
     const firstErrors = [];
     launcherChild = runLauncher(env, tmp, (line) => firstLines.push(line), (line) => firstErrors.push(line));
-    const firstReady = await waitForReady(firstLines, 120_000);
+    let firstReady;
+    try {
+      firstReady = await waitForReady(firstLines, 120_000);
+    } catch (error) {
+      killTree(launcherChild);
+      console.error("launcher stdout:\n" + firstLines.join("\n"));
+      console.error("launcher stderr:\n" + firstErrors.join("\n"));
+      throw error;
+    }
     if (!firstReady.includes(`"url":"http://127.0.0.1:`)) {
       killTree(launcherChild);
       throw new Error(`unexpected DSH_READY payload: ${firstReady}`);
@@ -270,7 +278,15 @@ async function main() {
     const secondLines = [];
     const secondErrors = [];
     launcherChild = runLauncher(env, tmp, (line) => secondLines.push(line), (line) => secondErrors.push(line));
-    const secondReady = await waitForReady(secondLines, 120_000);
+    let secondReady;
+    try {
+      secondReady = await waitForReady(secondLines, 120_000);
+    } catch (error) {
+      killTree(launcherChild);
+      console.error("launcher stdout:\n" + secondLines.join("\n"));
+      console.error("launcher stderr:\n" + secondErrors.join("\n"));
+      throw error;
+    }
     if (!secondReady.includes(`"url":"http://127.0.0.1:`)) {
       killTree(launcherChild);
       throw new Error(`second run failed: ${secondReady}`);
