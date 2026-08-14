@@ -125,6 +125,10 @@ function main() {
   }
   verifyRuntime(runtimeDir, "source runtime");
   verifyNpmCli(rootDir, "source npm-cli");
+  // Re-prune even when the runtime was prepared earlier: the AppImage bundler
+  // fails on foreign libc native binaries (koffi's musl_x64) inside
+  // node_modules, and linuxdeploy has no per-file exclusion knob.
+  run(process.execPath, [join(rootDir, "scripts", "prune-runtime.mjs")]);
   run(process.execPath, [join(rootDir, "scripts", "build-core.mjs")]);
 
   const coreSource = join(coreOutputDir, process.platform === "win32" ? "dsh-core.exe" : "dsh-core");
