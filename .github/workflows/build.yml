@@ -27,7 +27,7 @@ jobs:
             bundles: nsis
           - os: macos-latest
             platform: macos-arm64
-            bundles: app
+            bundles: dmg
           - os: macos-15-intel
             platform: macos-x64
             bundles: app
@@ -80,8 +80,9 @@ jobs:
           NO_STRIP: "1"
         run: pnpm build --bundles ${{ matrix.bundles }} --verbose
 
-      - name: Create DMG (macOS)
-        if: runner.os == 'macOS'
+      - name: Create DMG (macOS x64)
+        if: matrix.platform == 'macos-x64'
+        continue-on-error: true
         shell: bash
         run: |
           set -euo pipefail
@@ -113,7 +114,7 @@ jobs:
         with:
           name: installers-${{ matrix.platform }}
           path: installers/
-          if-no-files-found: error
+          if-no-files-found: ${{ matrix.platform == 'macos-x64' && 'warn' || 'error' }}
 
   release:
     name: Publish GitHub release
