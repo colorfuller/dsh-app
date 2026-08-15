@@ -1,6 +1,6 @@
 {
   "name": "dsh-desktop",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "private": true,
   "type": "module",
   "description": "One-click desktop app for the DeepSeek Harness Web UI. Bundles Node + @deepseek-ai/dsh via @yao-pkg/pkg, wraps it in a Tauri window: double-click the exe and the Web UI loads in the app window.",
