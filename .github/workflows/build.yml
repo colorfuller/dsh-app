@@ -88,14 +88,14 @@ jobs:
           set -euo pipefail
           VERSION="$(node -p "require('./package.json').version")"
           ARCH="$(uname -m | sed 's/x86_64/x64/; s/arm64/aarch64/')"
-          APP_DIR="src-tauri/target/release/bundle/macos/dsh-app.app"
+          APP_DIR="src-tauri/target/release/bundle/macos/DeepSeek Harness.app"
           STAGE_DIR="src-tauri/target/release/bundle/dmg/stage"
-          DMG="src-tauri/target/release/bundle/dmg/dsh-app_${VERSION}_${ARCH}.dmg"
+          DMG="src-tauri/target/release/bundle/dmg/DeepSeek Harness_${VERSION}_${ARCH}.dmg"
           rm -rf "$STAGE_DIR"
           mkdir -p "$STAGE_DIR"
           cp -R "$APP_DIR" "$STAGE_DIR/"
           ln -s /Applications "$STAGE_DIR/Applications"
-          hdiutil create -volname "dsh-app" -srcfolder "$STAGE_DIR" -ov -format UDZO "$DMG"
+          hdiutil create -volname "DeepSeek Harness" -srcfolder "$STAGE_DIR" -ov -format UDZO "$DMG"
 
       - name: Smoke test runtime auto-update
         run: pnpm smoke:update

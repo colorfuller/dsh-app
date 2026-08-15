@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "dsh-app",
+  "productName": "DeepSeek Harness",
   "version": "0.1.3",
   "identifier": "dev.dsh.desktop",
   "build": {
@@ -36,6 +36,6 @@
         "compression": "zlib"
       }
     },
-    "icon": ["icons/icon.ico", "icons/icon.png"]
+    "icon": ["icons/icon.ico", "icons/icon.png", "icons/icon.icns"]
   }
 }

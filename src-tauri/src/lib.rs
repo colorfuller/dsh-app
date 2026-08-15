@@ -47,6 +47,63 @@ fn shell_log_path<R: tauri::Runtime>(manager: &impl tauri::Manager<R>) -> PathBu
     std::env::temp_dir().join("dsh-app-logs").join("shell.log")
 }
 
+/// Theme-appropriate whale icon for the tray (and taskbar on Windows):
+/// black on light themes, white on dark themes.
+fn tray_icon_image(is_light: bool) -> tauri::image::Image<'static> {
+    if is_light {
+        tauri::image::Image::new_owned(
+            include_bytes!("../icons/tray-light.rgba").to_vec(),
+            64,
+            64,
+        )
+    } else {
+        tauri::image::Image::new_owned(
+            include_bytes!("../icons/tray-dark.rgba").to_vec(),
+            64,
+            64,
+        )
+    }
+}
+
+/// Whether the Windows UI is using the light theme. Reads the same registry
+/// key Explorer watches for "Apps" appearance.
+#[cfg(target_os = "windows")]
+fn is_light_theme() -> bool {
+    use winreg::enums::{HKEY_CURRENT_USER, KEY_READ};
+    use winreg::RegKey;
+
+    const SUBKEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize";
+    RegKey::predef(HKEY_CURRENT_USER)
+        .open_subkey_with_flags(SUBKEY, KEY_READ)
+        .and_then(|key| key.get_value::<u32, _>("AppsUseLightTheme"))
+        .map(|value| value != 0)
+        .unwrap_or(true)
+}
+
+/// Keep the tray and taskbar icons in sync with the Windows theme.
+#[cfg(target_os = "windows")]
+fn spawn_tray_theme_watcher(app: AppHandle) {
+    std::thread::spawn(move || {
+        let light = tray_icon_image(true);
+        let dark = tray_icon_image(false);
+        let mut last: Option<bool> = None;
+        loop {
+            let is_light = is_light_theme();
+            if last != Some(is_light) {
+                last = Some(is_light);
+                let icon = if is_light { light.clone() } else { dark.clone() };
+                if let Some(tray) = app.tray_by_id("main-tray") {
+                    let _ = tray.set_icon(Some(icon.clone()));
+                }
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.set_icon(icon);
+                }
+            }
+            std::thread::sleep(Duration::from_secs(2));
+        }
+    });
+}
+
 fn append_log(path: &Path, line: &str) {
     if let Some(parent) = path.parent() {
         let _ = create_dir_all(parent);
@@ -201,10 +258,25 @@ fn setup_tray(app: &mut App) -> Result<(), Box<dyn std::error::Error>> {
                 show_main_window(tray.app_handle());
             }
         });
-    if let Some(icon) = app.default_window_icon() {
-        builder = builder.icon(icon.clone());
+    #[cfg(target_os = "macos")]
+    {
+        // macOS menu bar icons are conventionally template images: a black
+        // glyph whose alpha channel the system recolors for light/dark menus.
+        builder = builder.icon(tray_icon_image(true)).icon_as_template(true);
+    }
+    #[cfg(target_os = "windows")]
+    {
+        builder = builder.icon(tray_icon_image(is_light_theme()));
+    }
+    #[cfg(target_os = "linux")]
+    {
+        if let Some(icon) = app.default_window_icon() {
+            builder = builder.icon(icon.clone());
+        }
     }
     builder.build(app)?;
+    #[cfg(target_os = "windows")]
+    spawn_tray_theme_watcher(app.handle().clone());
     Ok(())
 }
 

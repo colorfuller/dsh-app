@@ -1,8 +1,8 @@
 <div align="center">
 
-<img src="assets/icon.svg" width="96" alt="dsh-app logo" />
+<img src="assets/icon.svg" width="96" alt="DeepSeek Harness logo" />
 
-# DeepSeek Harness Desktop（dsh-app）
+# DeepSeek Harness Desktop
 
 **双击即用的 DeepSeek Harness 桌面版 —— 免装 Node、不开浏览器、数据零迁移**
 
@@ -17,7 +17,7 @@
 
 </div>
 
-> **English TL;DR** — dsh-desktop is a one-click desktop launcher for the DeepSeek Harness Web UI. It bundles a Node runtime and `@deepseek-ai/dsh`, opens the UI inside a native Tauri window (no browser, no installs), reuses your existing `~/.dsh` data, and self-updates in the background with automatic rollback. Available on Windows, macOS, and Linux.
+> **English TL;DR** — DeepSeek Harness Desktop is a one-click desktop launcher for the DeepSeek Harness Web UI. It bundles a Node runtime and `@deepseek-ai/dsh`, opens the UI inside a native Tauri window (no browser, no installs), reuses your existing `~/.dsh` data, and self-updates in the background with automatic rollback. Available on Windows, macOS, and Linux.
 
 <!-- 建议在此放置一张应用截图 / 演示 GIF，传播效果会更好 -->
 
@@ -37,7 +37,7 @@
 
 ## 🆚 和命令行版比，差别在哪
 
-| 体验 | `npx @deepseek-ai/dsh web` | **dsh-app** |
+| 体验 | `npx @deepseek-ai/dsh web` | **DeepSeek Harness** |
 | --- | --- | --- |
 | 环境要求 | 需要 Node.js + npm | **免安装，自带运行时** |
 | 启动方式 | 打开终端输命令 | **双击图标** |
@@ -50,7 +50,7 @@
 
 社区里另外两个热门的 DeepSeek Harness 桌面封装（[dataelement/dsh-desktop](https://github.com/dataelement/dsh-desktop) 与 [anywhere-labs/deepseek-harness-desktop](https://github.com/anywhere-labs/deepseek-harness-desktop)）都选择了 Electron 路线，而本项目用 Tauri 走了另一条路：
 
-| 维度 | **dsh-app（本项目）** | dataelement/dsh-desktop | anywhere-labs/deepseek-harness-desktop |
+| 维度 | **DeepSeek Harness（本项目）** | dataelement/dsh-desktop | anywhere-labs/deepseek-harness-desktop |
 | --- | --- | --- | --- |
 | 技术栈 | **Tauri 2（Rust）· 系统 WebView** | Electron · 内置 Chromium | Electron · 内置 Chromium |
 | 平台覆盖 | **Windows · macOS（ARM/Intel）· Linux** | macOS · Windows x64（Intel/Windows 运行时待验证，ARM 暂不支持） | macOS Apple Silicon · Windows x64（macOS Intel 计划中） |
@@ -65,7 +65,7 @@
 ## 🚀 一分钟上手
 
 1. 在 [Releases](https://github.com/colorfuller/dsh-app/releases) 下载对应平台安装包：Windows 选 `.exe`，macOS 选 `.dmg`，Linux 选 `.deb` / `.AppImage`；
-2. 安装后双击打开 dsh-app；
+2. 安装后双击打开 DeepSeek Harness；
 3. 首次启动会看到 splash，服务就绪后自动进入 Web UI。
 
 无需任何配置：已经用过 dsh CLI 的话，原有数据原样可用；从零开始的话，按界面提示填好 API Key 即可。

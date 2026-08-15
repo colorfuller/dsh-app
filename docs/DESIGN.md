@@ -1,8 +1,8 @@
-# dsh-desktop 设计方案
+# DeepSeek Harness Desktop 设计方案
 
 ## 1. 目标
 
-用户双击 `dsh-app.exe`（或 macOS/Linux 上的应用）后，应用自动完成：
+用户双击 `DeepSeek Harness.exe`（或 macOS/Linux 上的应用）后，应用自动完成：
 
 1. 启动随应用内置的 Node 运行时与 `@deepseek-ai/dsh`；
 2. 执行 `dsh web`（浏览器 UI 服务）；
@@ -13,7 +13,8 @@
 
 ```
 ┌────────────────────────────────────────────────────────────┐
-│ dsh-app.exe (Tauri v2 shell, GUI subsystem, no console)     │
+│ DeepSeek Harness.exe (Tauri v2 shell,                      │
+│   GUI subsystem, no console)                               │
 │                                                            │
 │  ┌──────────────────┐   spawn (CREATE_NO_WINDOW)           │
 │  │ WebView2 窗口     │ ──────────────────────────────┐      │

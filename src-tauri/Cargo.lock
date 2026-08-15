@@ -825,7 +825,7 @@ dependencies = [
 
 [[package]]
 name = "dsh-app"
-version = "0.1.1"
+version = "0.1.3"
 dependencies = [
  "serde",
  "serde_json",
@@ -833,6 +833,7 @@ dependencies = [
  "tauri-build",
  "tauri-plugin-single-instance",
  "url",
+ "winreg",
 ]
 
 [[package]]

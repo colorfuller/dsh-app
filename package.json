@@ -14,7 +14,7 @@
     "build:exe": "node scripts/build.mjs --no-bundle",
     "build:nsi": "node scripts/build.mjs --bundles nsis",
     "smoke:update": "node scripts/smoke-update.mjs",
-    "icons": "tauri icon assets/icon.svg"
+    "icons": "node scripts/generate-icons.mjs"
   },
   "dependencies": {
     "@deepseek-ai/dsh": "latest"

@@ -12,6 +12,8 @@ const coreOutputDir = join(rootDir, "dist-core");
 const tauriDir = join(rootDir, "src-tauri");
 const binariesDir = join(tauriDir, "binaries");
 const npmCliEntry = join(rootDir, "npm-cli", "bin", "npm-cli.js");
+const appIconEntry = join(tauriDir, "icons", "icon.ico");
+const trayLightEntry = join(tauriDir, "icons", "tray-light.rgba");
 
 const CRITICAL_RUNTIME_FILES = [
   join("node_modules", "@deepseek-ai", "dsh", "lib", "bin.js"),
@@ -115,6 +117,12 @@ function main() {
   const noBundle = noBundleIndex >= 0;
   if (noBundleIndex >= 0) {
     extraArgs.splice(noBundleIndex, 1);
+  }
+
+  // Icons are generated artifacts (src-tauri/icons is gitignored); regenerate
+  // them when they are missing so a fresh checkout still builds.
+  if (!existsSync(appIconEntry) || !existsSync(trayLightEntry)) {
+    run(process.execPath, [join(rootDir, "scripts", "generate-icons.mjs")]);
   }
 
   if (!existsSync(join(runtimeDir, "node_modules", "@deepseek-ai", "dsh", "lib", "bin.js"))) {
